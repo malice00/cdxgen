@@ -1,5 +1,5 @@
 import { globSync } from "glob";
-import { tmpdir, platform, freemem } from "node:os";
+import { homedir, tmpdir, platform, freemem } from "node:os";
 import {
   dirname,
   sep as _sep,
@@ -11,6 +11,7 @@ import {
 import {
   existsSync,
   readFileSync,
+  lstatSync,
   mkdtempSync,
   rmSync,
   copyFileSync,
@@ -4851,20 +4852,27 @@ export const parseSwiftResolved = (resolvedFile) => {
  *
  * @param {string} mavenCmd Maven command to use
  * @param {string} basePath Path to the maven project
+ * @param {boolean} cleanup Remove temporary directories
+ * @param {boolean} includeCacheDir Include maven and gradle cache directories
  */
-export const collectMvnDependencies = function (mavenCmd, basePath) {
+export const collectMvnDependencies = function (
+  mavenCmd,
+  basePath,
+  cleanup = true,
+  includeCacheDir = false
+) {
   const tempDir = mkdtempSync(join(tmpdir(), "mvn-deps-"));
   console.log(
-    `Executing 'mvn dependency:copy-dependencies -DoutputDirectory=${tempDir} -DexcludeTransitive=true -DincludeScope=runtime' in ${basePath}`
+    `Executing 'mvn dependency:copy-dependencies -DoutputDirectory=${tempDir}' in ${basePath}`
   );
   const result = spawnSync(
     mavenCmd,
     [
       "dependency:copy-dependencies",
       `-DoutputDirectory=${tempDir}`,
-      "-DexcludeTransitive=true",
-      "-DincludeScope=runtime",
       "-U",
+      "-Dmdep.copyPom=true",
+      "-Dmdep.useRepositoryLayout=true",
       "-Dmdep.prependGroupId=" + (process.env.MAVEN_PREPEND_GROUP || "false"),
       "-Dmdep.stripVersion=" + (process.env.MAVEN_STRIP_VERSION || "false")
     ],
@@ -4888,9 +4896,15 @@ export const collectMvnDependencies = function (mavenCmd, basePath) {
   } else {
     jarNSMapping = collectJarNS(tempDir);
   }
+  if (includeCacheDir) {
+    // slow operation
+    const MAVEN_CACHE_DIR = join(homedir(), ".m2", "repository");
+    jarNSMapping = collectJarNS(MAVEN_CACHE_DIR);
+    // What about gradle and sbt cache?
+  }
+
   // Clean up
-  if (tempDir && tempDir.startsWith(tmpdir()) && rmSync) {
-    console.log(`Cleaning up ${tempDir}`);
+  if (cleanup && tempDir && tempDir.startsWith(tmpdir()) && rmSync) {
     rmSync(tempDir, { recursive: true, force: true });
   }
   return jarNSMapping;
@@ -4912,7 +4926,24 @@ export const collectJarNS = function (jarPath) {
   const jarFiles = getAllFiles(jarPath, "**/*.jar");
   if (jarFiles && jarFiles.length) {
     for (const jf of jarFiles) {
-      const jarname = basename(jf);
+      const jarname = jf;
+      const pomname = jarname.replace(".jar", ".pom");
+      let pomData = undefined;
+      let purl = undefined;
+      if (existsSync(pomname)) {
+        pomData = parsePomXml(readFileSync(pomname, "utf-8"));
+        if (pomData) {
+          const purlObj = new PackageURL(
+            "maven",
+            pomData.groupId || "",
+            pomData.artifactId,
+            pomData.version,
+            { type: "jar" },
+            null
+          );
+          purl = purlObj.toString();
+        }
+      }
       if (DEBUG_MODE) {
         console.log(`Executing 'jar tf ${jf}'`);
       }
@@ -4927,15 +4958,23 @@ export const collectJarNS = function (jarPath) {
         const consolelines = (jarResult.stdout || "").split("\n");
         const nsList = consolelines
           .filter((l) => {
-            return l.includes(".class") && !l.includes("-INF");
+            return (
+              l.includes(".class") &&
+              !l.includes("-INF") &&
+              !l.includes("module-info")
+            );
           })
           .map((e) => {
             return e
+              .replace(".class", "")
               .replace(/\/$/, "")
-              .replace(/\//g, ".")
-              .replace(".class", "");
+              .replace(/\//g, ".");
           });
-        jarNSMapping[jarname] = nsList;
+        jarNSMapping[purl || jf] = {
+          jarFile: jf,
+          pom: pomData,
+          namespaces: nsList
+        };
       }
     }
     if (!jarNSMapping) {
@@ -4943,9 +4982,6 @@ export const collectJarNS = function (jarPath) {
     }
   } else {
     console.log(`${jarPath} did not contain any jars.`);
-  }
-  if (DEBUG_MODE) {
-    console.log("JAR Namespace mapping", jarNSMapping);
   }
   return jarNSMapping;
 };
@@ -5431,6 +5467,8 @@ export const getAtomCommand = () => {
 };
 
 export const executeAtom = (src, args) => {
+  let cwd =
+    existsSync(src) && lstatSync(src).isDirectory() ? src : dirname(src);
   let ATOM_BIN = getAtomCommand();
   if (ATOM_BIN.includes(" ")) {
     const tmpA = ATOM_BIN.split(" ");
@@ -5448,7 +5486,7 @@ export const executeAtom = (src, args) => {
     JAVA_OPTS: `-Xms${freeMemoryGB}G -Xmx${freeMemoryGB}G`
   };
   const result = spawnSync(ATOM_BIN, args, {
-    cwd: src,
+    cwd,
     encoding: "utf-8",
     timeout: TIMEOUT_MS,
     env
