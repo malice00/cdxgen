@@ -276,11 +276,11 @@ jobs:
 #          repository: 'owasp-dep-scan/blint'
 #          path: 'repotests/blint'
 #          ref: 'v2.2.2'
-#      - uses: actions/checkout@v4
-#        with:
-#          repository: 'malice00/cdxgen-expo-test'
-#          ref: 'main'
-#          path: 'repotests/expo-test'
+      - uses: actions/checkout@v4
+        with:
+          repository: 'malice00/cdxgen-expo-test'
+          ref: 'main'
+          path: 'repotests/expo-test'
       - uses: actions/checkout@v4
         with:
           repository: 'malice00/cdxgen-cocoapods-test'
@@ -561,23 +561,24 @@ jobs:
 #          GRADLE_ARGS_DEPENDENCIES: "--configuration releaseRuntimeClasspath"
 #          GRADLE_SKIP_MODULES: root
 #        shell: bash
-#      - name: repotests expo not mac
-#        if: matrix.os != 'macos-15'
-#        run: |
-#          cd repotests/expo-test && npm ci --legacy-peer-deps && cd ../..
-#                                                                                               bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods.json
-#          COCOA_MERGE_SUBSPECS=true                                                            bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods-nosubs.json
-#          COCOA_MERGE_SUBSPECS=true COCOA_RESOLVE_FROM_NODE=true                               bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods-npm.json
-#                                                                                               bin/cdxgen.js -p              -t gradle        repotests/expo-test -o bomresults/bom-expo-gradle.json
-#                                                                 GRADLE_RESOLVE_FROM_NODE=true bin/cdxgen.js -p              -t gradle        repotests/expo-test -o bomresults/bom-expo-gradle-npm.json
-#          COCOA_MERGE_SUBSPECS=true                                                            bin/cdxgen.js -p -t cocoapods -t gradle -t npm repotests/expo-test -o bomresults/bom-expo-full.json
-#          COCOA_MERGE_SUBSPECS=true COCOA_RESOLVE_FROM_NODE=true GRADLE_RESOLVE_FROM_NODE=true bin/cdxgen.js -p -t cocoapods -t gradle -t npm repotests/expo-test -o bomresults/bom-expo-full-npm.json
-#        env:
-#          COCOA_RESOLVE_FROM_NODE_EXCLUSION_DIRS: sdks,third-party-podspecs
-#          GRADLE_ARGS_DEPENDENCIES: "--configuration releaseRuntimeClasspath"
-#          GRADLE_SKIP_MODULES: root
-#        shell: bash
+      - name: repotests expo not mac
+        if: matrix.os != 'macos-15'
+        run: |
+          cd repotests/expo-test && npm ci --legacy-peer-deps && cd ../..
+                                                                                               bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods.json
+          COCOA_MERGE_SUBSPECS=true                                                            bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods-nosubs.json
+          COCOA_MERGE_SUBSPECS=true COCOA_RESOLVE_FROM_NODE=true                               bin/cdxgen.js -p -t cocoapods                  repotests/expo-test -o bomresults/bom-expo-cocoapods-npm.json
+                                                                                               bin/cdxgen.js -p              -t gradle        repotests/expo-test -o bomresults/bom-expo-gradle.json
+                                                                 GRADLE_RESOLVE_FROM_NODE=true bin/cdxgen.js -p              -t gradle        repotests/expo-test -o bomresults/bom-expo-gradle-npm.json
+          COCOA_MERGE_SUBSPECS=true                                                            bin/cdxgen.js -p -t cocoapods -t gradle -t npm repotests/expo-test -o bomresults/bom-expo-full.json
+          COCOA_MERGE_SUBSPECS=true COCOA_RESOLVE_FROM_NODE=true GRADLE_RESOLVE_FROM_NODE=true bin/cdxgen.js -p -t cocoapods -t gradle -t npm repotests/expo-test -o bomresults/bom-expo-full-npm.json
+        env:
+          COCOA_RESOLVE_FROM_NODE_EXCLUSION_DIRS: sdks,third-party-podspecs
+          GRADLE_ARGS_DEPENDENCIES: "--configuration releaseRuntimeClasspath"
+          GRADLE_SKIP_MODULES: root
+        shell: bash
       - name: repotests cocoapods
+        if: matrix.os != 'windows-latest'
         run: |
           COCOA_FULL_SCAN=false                                                                               bin/cdxgen.js -p repotests/cocoapods-test -o bomresults/bom-cocoapods-simple.json
                                                                                                               bin/cdxgen.js -p repotests/cocoapods-test -o bomresults/bom-cocoapods-full.json
